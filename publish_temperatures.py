@@ -17,7 +17,7 @@ client.loop_start()
 last_temperatures = {}
 
 
-def generate_temperature(hour, sensor_id):
+def generate_temperature(hour, sensor_tag):
     """Generates a temperature value that follows a pattern based on the hour of the day."""
     # Define the base temperature and amplitude of fluctuation
     base_temp = 20  # Base temperature to fluctuate around
@@ -31,13 +31,13 @@ def generate_temperature(hour, sensor_id):
     temperature = base_temp + temp_fluctuation + sensor_variation
 
     # Ensure that the temperature change is not too abrupt compared to the last value for the same sensor
-    last_temperature = last_temperatures.get(sensor_id, base_temp)
+    last_temperature = last_temperatures.get(sensor_tag, base_temp)
     if abs(temperature - last_temperature) > 2:
         temperature = last_temperature + (2 if temperature > last_temperature else -2)
 
     # Round to 2 decimal places and update the last known temperature
     temperature = round(temperature, 2)
-    last_temperatures[sensor_id] = temperature
+    last_temperatures[sensor_tag] = temperature
 
     return temperature
 
@@ -45,19 +45,35 @@ def generate_temperature(hour, sensor_id):
 try:
     while True:
         current_hour = datetime.now().hour
-        for i in range(1, 5):  # Assuming sensor IDs are 1 through 4
-            temperature = generate_temperature(current_hour, i)
+        # Asignamos los nombres de los edificios y áreas de acuerdo a la imagen de ejemplo
+        sensor_locations = {
+            1: {"building_name": "storage_building", "area_name": "storage"},
+            2: {"building_name": "production_building", "area_name": "production_hall"},
+            3: {"building_name": "production_building", "area_name": "production_hall"},
+            4: {"building_name": "production_building", "area_name": "storage"},
+        }
+
+        for sensor_number in range(1, 5):  # Asumiendo sensores ID 1 a 4
+            temperature = generate_temperature(current_hour, sensor_number)
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            payload = json.dumps({"temperature": temperature, "timestamp": timestamp})
-            topic = f"warehouse/{i}/temperature"
+            sensor_tag = f"temp_{sensor_number}"
+            payload = json.dumps(
+                {
+                    "sensor_tag": sensor_tag,
+                    "temperature": temperature,
+                    "timestamp": timestamp,
+                }
+            )
+            location = sensor_locations[sensor_number]
+            topic = f"building/{location['building_name']}/area/{location['area_name']}/sensor/{sensor_tag}/temperature"
             result = client.publish(topic, payload)
             status = result[0]
             if status == 0:
                 print(
-                    f"Sensor {i}: Temperature {temperature} at {timestamp} published to topic {topic}"
+                    f"Sensor {sensor_tag}: Temperature {temperature} at {timestamp} published to topic '{topic}'"
                 )
             else:
-                print(f"Failed to send message to topic {topic}")
+                print(f"Failed to send message to topic '{topic}'")
         time.sleep(60)  # Wait a minute before sending the next set of temperatures
 finally:
     client.disconnect()
